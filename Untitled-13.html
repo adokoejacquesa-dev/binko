@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Binkô - Marketplace des Cœurs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+  <!-- HEADER -->
+  <header class="bg-white shadow p-4 flex justify-between items-center">
+    <h1 class="text-2xl font-bold text-pink-600">Binkô</h1>
+    <div id="userStatus" class="text-sm text-gray-600"></div>
+    <button id="logoutBtn" class="hidden bg-red-500 text-white px-3 py-1 rounded text-sm">Déconnexion</button>
+  </header>
+
+  <main class="p-4">
+
+    <!-- SECTION AUTH -->
+    <section id="authSection" class="max-w-md mx-auto mb-6">
+      <h2 class="text-xl font-semibold mb-4">Bienvenue sur Binkô</h2>
+      <p class="mb-4 text-gray-600">Connecte-toi ou inscris-toi pour accéder à la marketplace.</p>
+
+      <!-- Connexion -->
+      <h3 class="text-lg font-semibold mb-2">Connexion</h3>
+      <form id="loginForm" class="space-y-3 mb-6">
+        <input type="email" id="loginEmail" placeholder="Email" class="w-full border p-2 rounded" required />
+        <input type="password" id="loginPassword" placeholder="Mot de passe" class="w-full border p-2 rounded" required />
+        <button type="submit" class="w-full bg-pink-500 text-white p-2 rounded">Se connecter</button>
+      </form>
+
+      <!-- Inscription -->
+      <h3 class="text-lg font-semibold mb-2">Inscription</h3>
+      <form id="signupForm" class="space-y-3">
+        <input type="text" id="name" placeholder="Nom" class="w-full border p-2 rounded" required />
+        <input type="email" id="email" placeholder="Email" class="w-full border p-2 rounded" required />
+        <input type="password" id="password" placeholder="Mot de passe" class="w-full border p-2 rounded" required />
+        <input type="number" id="age" placeholder="Âge" class="w-full border p-2 rounded" required />
+        <input type="text" id="city" placeholder="Ville" class="w-full border p-2 rounded" required />
+        <select id="gender" class="w-full border p-2 rounded" required>
+          <option value="">Genre</option>
+          <option value="Femme">Femme</option>
+          <option value="Homme">Homme</option>
+        </select>
+        <input type="file" id="photo" class="w-full" required />
+        <button type="submit" class="w-full bg-pink-500 text-white p-2 rounded">S'inscrire</button>
+      </form>
+    </section>
+
+    <!-- SECTION MARKETPLACE -->
+    <section id="marketplace" class="hidden">
+      <!-- Filtres -->
+      <h2 class="text-xl font-semibold mb-2">Filtres de recherche</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <input type="text" placeholder="Ville" id="filterCity" class="border p-2 rounded" />
+        <input type="number" placeholder="Âge max" id="filterAge" class="border p-2 rounded" />
+        <select id="filterGender" class="border p-2 rounded">
+          <option value="">Genre</option>
+          <option value="Femme">Femme</option>
+          <option value="Homme">Homme</option>
+        </select>
+        <button onclick="applyFilters()" class="bg-pink-500 text-white px-4 py-2 rounded">Appliquer</button>
+      </div>
+
+      <!-- Profils -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="profiles"></div>
+
+      <!-- Messagerie -->
+      <section class="bg-white rounded-xl shadow p-4 flex flex-col max-w-3xl mx-auto">
+        <h2 class="text-lg font-semibold mb-2">Messagerie</h2>
+        <div id="chatWindow" class="flex-1 overflow-y-auto mb-3 border p-2 rounded h-80"></div>
+        <form id="chatForm" class="flex gap-2">
+          <input id="chatInput" type="text" placeholder="Écrire un message..." class="flex-1 border p-2 rounded" required />
+          <button class="bg-pink-500 text-white px-4 rounded">Envoyer</button>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <footer class="bg-white text-center text-xs p-4 mt-10 text-gray-400">
+    &copy; 2025 Binkô - La marketplace des cœurs togolais
+  </footer>
+
+  <script>
+    // 🔹 Config Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDK54JwPATsMRKxyBapw97L-2yT8hVqAZY",
+      authDomain: "binko-81c0d.firebaseapp.com",
+      projectId: "binko-81c0d",
+      storageBucket: "binko-81c0d.firebasestorage.app",
+      messagingSenderId: "163824809788",
+      appId: "1:163824809788:web:e09154d8f14e34f8295039",
+      measurementId: "G-XQ9JS8D09V"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+
+    let currentUser = null;
+    let selectedUser = null;
+    let allUsers = [];
+
+    const authSection = document.getElementById("authSection");
+    const marketplace = document.getElementById("marketplace");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    // 🔹 Surveillance de l'état de connexion
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        authSection.classList.add("hidden");
+        marketplace.classList.remove("hidden");
+        logoutBtn.classList.remove("hidden");
+        loadProfiles();
+      } else {
+        currentUser = null;
+        authSection.classList.remove("hidden");
+        marketplace.classList.add("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    });
+
+    logoutBtn.onclick = () => auth.signOut();
+
+    // 🔹 Inscription
+    document.getElementById("signupForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const age = document.getElementById("age").value;
+      const city = document.getElementById("city").value;
+      const gender = document.getElementById("gender").value;
+      const file = document.getElementById("photo").files[0];
+
+      try {
+        const userCred = await auth.createUserWithEmailAndPassword(email, password);
+        const uid = userCred.user.uid;
+
+        // Upload photo
+        const storageRef = storage.ref("profiles/" + uid);
+        await storageRef.put(file);
+        const photoURL = await storageRef.getDownloadURL();
+
+        await db.collection("users").doc(uid).set({ uid, name, email, age, city, gender, photoURL });
+        alert("Inscription réussie !");
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    // 🔹 Connexion
+    document.getElementById("loginForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email = document.getElementById("loginEmail").value;
+      const password = document.getElementById("loginPassword").value;
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    // 🔹 Charger profils
+    function loadProfiles() {
+      db.collection("users").onSnapshot(snapshot => {
+        allUsers = snapshot.docs.map(doc => doc.data());
+        renderProfiles(allUsers);
+      });
+    }
+
+    function renderProfiles(list) {
+      const container = document.getElementById("profiles");
+      container.innerHTML = "";
+      list.forEach(p => {
+        const card = document.createElement("div");
+        card.className = "bg-white p-3 rounded-xl shadow hover:shadow-lg transition-all cursor-pointer";
+        card.innerHTML = `
+          <img src="${p.photoURL}" alt="${p.name}" class="w-full h-40 object-cover rounded-md mb-2">
+          <h3 class="font-semibold">${p.name}, ${p.age}</h3>
+          <p class="text-sm text-gray-500">${p.city} - ${p.gender}</p>
+          <button class="mt-2 bg-pink-500 text-white text-sm px-3 py-1 rounded">Contacter</button>
+        `;
+        card.onclick = () => openChat(p.uid, p.name);
+        container.appendChild(card);
+      });
+    }
+
+    function applyFilters() {
+      const city = document.getElementById("filterCity").value.toLowerCase();
+      const age = parseInt(document.getElementById("filterAge").value);
+      const gender = document.getElementById("filterGender").value;
+      const filtered = allUsers.filter(p => {
+        return (!city || p.city.toLowerCase().includes(city)) &&
+               (!isNaN(age) ? p.age <= age : true) &&
+               (!gender || p.gender === gender);
+      });
+      renderProfiles(filtered);
+    }
+
+    // 🔹 Messagerie
+    document.getElementById("chatForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      if (!selectedUser || !currentUser) return alert("Choisis un profil !");
+      const text = document.getElementById("chatInput").value;
+      document.getElementById("chatInput").value = "";
+
+      await db.collection("messages").add({
+        from: currentUser.uid,
+        to: selectedUser.uid,
+        text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    function openChat(userId, userName) {
+      selectedUser = { uid: userId, name: userName };
+      listenMessages(userId);
+    }
+
+    function listenMessages(userId) {
+      const chatWindow = document.getElementById("chatWindow");
+      db.collection("messages")
+        .where("from", "in", [currentUser.uid, userId])
+        .where("to", "in", [currentUser.uid, userId])
+        .orderBy("createdAt")
+        .onSnapshot(snapshot => {
+          chatWindow.innerHTML = "";
+          snapshot.forEach(doc => {
+            const msg = doc.data();
+            const align = msg.from === currentUser.uid ? "text-right text-pink-600" : "text-left text-gray-700";
+            chatWindow.innerHTML += `<p class="${align}">${msg.text}</p>`;
+          });
+          chatWindow.scrollTop = chatWindow.scrollHeight;
+        });
+    }
+  </script>
+</body>
+</html>
